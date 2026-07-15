@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC Webhook Monitor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #070b13;
+            --bg-card: rgba(11, 17, 32, 0.75);
+            --border-color: rgba(0, 242, 254, 0.15);
+            --border-glow: rgba(0, 242, 254, 0.4);
+            --neon-cyan: #00f2fe;
+            --neon-green: #39ff14;
+            --neon-orange: #ff9900;
+            --neon-red: #ff0055;
+            --text-primary: #e2e8f0;
+            --text-muted: #64748b;
+            --font-sans: 'Outfit', sans-serif;
+            --font-mono: 'Share Tech Mono', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Cyber Grid Background */
+        .grid-background {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 242, 254, 0.02) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 242, 254, 0.02) 1px, transparent 1px);
+            background-size: 45px 45px;
+            z-index: -2;
+            pointer-events: none;
+        }
+
+        .grid-background::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 50% 50%, transparent 10%, #03050a 90%);
+            z-index: -1;
+        }
+
+        .container {
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            flex-grow: 1;
+        }
+
+        /* Dashboard Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 30px;
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+            box-shadow: 0 0 25px rgba(0, 242, 254, 0.05);
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .logo-area h1 {
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: 4px;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.4);
+            background: linear-gradient(135deg, #fff 40%, var(--neon-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .status-badge {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            padding: 4px 10px;
+            border: 1px solid var(--neon-green);
+            background: rgba(57, 255, 20, 0.1);
+            color: var(--neon-green);
+            border-radius: 4px;
+            letter-spacing: 1px;
+            box-shadow: 0 0 8px rgba(57, 255, 20, 0.2);
+            animation: pulse-border 2s infinite;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(57, 255, 20, 0.4); }
+            50% { border-color: rgba(57, 255, 20, 1); }
+        }
+
+        .clock-display {
+            font-family: var(--font-mono);
+            color: var(--neon-cyan);
+            font-size: 15px;
+            text-shadow: 0 0 8px rgba(0, 242, 254, 0.2);
+        }
+
+        /* Overview Summary Grid */
+        .overview-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .overview-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .summary-card {
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            backdrop-filter: blur(12px);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.3s ease;
+        }
+
+        .summary-card:hover {
+            border-color: var(--border-glow);
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.05);
+        }
+
+        .summary-meta h3 {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .summary-meta p {
+            font-family: var(--font-mono);
+            font-size: 32px;
+            font-weight: 800;
+        }
+
+        .count-active { color: var(--neon-red); text-shadow: 0 0 10px rgba(255, 0, 85, 0.3); }
+        .count-violations { color: var(--neon-orange); text-shadow: 0 0 10px rgba(255, 153, 0, 0.3); }
+        .count-status { color: var(--neon-cyan); text-shadow: 0 0 10px rgba(0, 242, 254, 0.3); }
+
+        /* Main Dashboard Tables Grid */
+        .tables-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 24px;
+            flex-grow: 1;
+        }
+
+        @media (max-width: 1024px) {
+            .tables-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Glassmorphic Panel Cards */
+        .panel {
+            display: flex;
+            flex-direction: column;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            backdrop-filter: blur(12px) saturate(160%);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            overflow: hidden;
+            transition: border-color 0.3s ease;
+        }
+
+        .panel:hover {
+            border-color: var(--border-glow);
+        }
+
+        .panel-header {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 242, 254, 0.02);
+        }
+
+        .panel-header h2 {
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            color: #fff;
+        }
+
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--neon-cyan);
+            box-shadow: 0 0 8px var(--neon-cyan);
+            animation: dot-pulse 1.5s infinite;
+        }
+
+        @keyframes dot-pulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+
+        .panel-body {
+            padding: 0;
+            overflow-y: auto;
+            flex-grow: 1;
+            max-height: 480px;
+            min-height: 250px;
+        }
+
+        /* Data Tables Styling */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            text-align: left;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            background-color: rgba(7, 11, 19, 0.95);
+            z-index: 1;
+        }
+
+        th {
+            padding: 14px 18px;
+            font-family: var(--font-mono);
+            color: var(--text-muted);
+            font-weight: normal;
+            letter-spacing: 1px;
+            border-bottom: 1px solid var(--border-color);
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 14px 18px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            vertical-align: middle;
+        }
+
+        tr:hover td {
+            background-color: rgba(255, 255, 255, 0.015);
+        }
+
+        /* Custom cell formatting */
+        .ip-cell {
+            font-family: var(--font-mono);
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 6px rgba(255, 255, 255, 0.15);
+        }
+
+        .time-cell {
+            font-family: var(--font-mono);
+            color: var(--text-primary);
+        }
+
+        .badge-violation {
+            display: inline-block;
+            padding: 3px 8px;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            font-weight: bold;
+            border-radius: 4px;
+        }
+
+        .tier-1 {
+            background: rgba(0, 242, 254, 0.1);
+            color: var(--neon-cyan);
+            border: 1px solid rgba(0, 242, 254, 0.3);
+        }
+
+        .tier-2 {
+            background: rgba(255, 153, 0, 0.15);
+            color: var(--neon-orange);
+            border: 1px solid rgba(255, 153, 0, 0.4);
+        }
+
+        .tier-3 {
+            background: rgba(255, 0, 85, 0.15);
+            color: var(--neon-red);
+            border: 1px solid rgba(255, 0, 85, 0.4);
+            box-shadow: 0 0 5px rgba(255, 0, 85, 0.2);
+        }
+
+        .empty-placeholder {
+            padding: 40px;
+            text-align: center;
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+            font-size: 13px;
+        }
+
+        /* Scrollbar styling */
+        .panel-body::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .panel-body::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .panel-body::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .panel-body::-webkit-scrollbar-thumb:hover {
+            background: var(--neon-cyan);
+        }
+
+        /* Footer styling */
+        footer {
+            margin-top: auto;
+            padding: 16px;
+            text-align: center;
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-muted);
+            letter-spacing: 2px;
+            border-top: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        /* Modal Overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(3, 5, 10, 0.85);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Modal Box */
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            box-shadow: 0 0 35px rgba(0, 242, 254, 0.2);
+            border-radius: 14px;
+            width: 480px;
+            padding: 26px;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: scale(1);
+        }
+
+        .modal-title {
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: 2px;
+            color: #fff;
+            margin-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+            text-shadow: 0 0 10px rgba(0, 242, 254, 0.3);
+        }
+
+        /* Buttons styling */
+        .modal-btn {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            letter-spacing: 1px;
+            padding: 9px 18px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+
+        .cancel-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--text-muted);
+        }
+
+        .cancel-btn:hover {
+            color: #fff;
+            border-color: #fff;
+        }
+
+        .confirm-btn {
+            background: var(--neon-cyan);
+            color: #000;
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.25);
+            font-weight: bold;
+        }
+
+        .confirm-btn:hover {
+            background: #fff;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="grid-background"></div>
+
+    <div class="container">
+        <!-- Dashboard Header -->
+        <header>
+            <div class="logo-area">
+                <h1 id="monitor-title">WEBHOOK MONITOR</h1>
+                <span class="status-badge" id="monitor-status">ONLINE</span>
+            </div>
+            <div class="clock-display" id="clock">00:00:00 UTC</div>
+        </header>
+
+        <!-- Overview Cards -->
+        <section class="overview-grid">
+            <div class="summary-card">
+                <div class="summary-meta">
+                    <h3>Active Blocks</h3>
+                    <p class="count-active" id="stat-active">0</p>
+                </div>
+                <div class="summary-icon">🚫</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-meta">
+                    <h3>Total Alerts</h3>
+                    <p class="count-violations" id="stat-violations">0</p>
+                </div>
+                <div class="summary-icon">⚠️</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-meta">
+                    <h3>Flask Receiver</h3>
+                    <p class="count-status">PORT 6666</p>
+                </div>
+                <div class="summary-icon">🔌</div>
+            </div>
+        </section>
+
+        <!-- Dynamic Data Tables -->
+        <section class="tables-grid">
+            
+            <!-- Active Blocks Panel -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>ACTIVE IP BLOCKS</h2>
+                    <div class="pulse-dot" style="background-color: var(--neon-red); box-shadow: 0 0 8px var(--neon-red);"></div>
+                </div>
+                <div class="panel-body">
+                    <table id="active-blocks-table">
+                        <thead>
+                            <tr>
+                                <th>Client IP</th>
+                                <th>Escalation</th>
+                                <th>Remaining Time</th>
+                                <th>Trigger Alert</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="active-blocks-body">
+                            <tr>
+                                <td colspan="4" class="empty-placeholder">Loading block data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Historical Violations Panel -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>HISTORICAL ALERTS</h2>
+                    <div class="pulse-dot"></div>
+                </div>
+                <div class="panel-body">
+                    <table id="violations-table">
+                        <thead>
+                            <tr>
+                                <th>IP</th>
+                                <th>Rule triggering alert</th>
+                                <th>Received At</th>
+                            </tr>
+                        </thead>
+                        <tbody id="violations-body">
+                            <tr>
+                                <td colspan="3" class="empty-placeholder">Loading violations data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+        <!-- IP History Query Panel -->
+        <div class="panel">
+            <div class="panel-header">
+                <h2>IP BLOCK HISTORY</h2>
+            </div>
+            <div class="panel-body">
+                <div style="padding:12px; display:flex; gap:8px; align-items:center;">
+                    <input type="text" id="history-ip-input" placeholder="Enter IP address"
+                           style="flex:1; padding:6px 10px; border:1px solid var(--border-color); background: var(--bg-card); color: var(--text-primary); border-radius:4px;">
+                    <button id="history-search-btn"
+                            style="padding:6px 12px; background: var(--neon-cyan); color:#000; border:none; border-radius:4px; cursor:pointer;">
+                        Search
+                    </button>
+                </div>
+                <div id="history-result" style="margin-top:12px;"></div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer>
+            SPLUNK WEBHOOK INTEGRATION // SECURE AUDITING SYSTEM // WEB INTERFACE v1.0
+        </footer>
+    </div>
+
+    <!-- Unblock Modal Dialog -->
+    <div id="unblock-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 class="modal-title">UNBLOCK CONFIGURATION</h3>
+            <p style="font-size: 13px; color: var(--text-primary); margin-bottom: 16px;">IP Address: <span id="modal-ip-display" style="color: var(--neon-cyan); font-family: var(--font-mono); font-weight: bold;"></span></p>
+            <div style="margin-bottom: 20px;">
+                <label for="modal-reason-input" style="display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px;">Reason for Unblocking</label>
+                <textarea id="modal-reason-input" rows="3" placeholder="Explain why this IP is being unblocked..."
+                          style="width: 100%; padding: 10px; background: rgba(7, 11, 19, 0.95); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 6px; font-family: var(--font-sans); font-size: 13px; resize: none; outline: none; transition: border-color 0.2s;"></textarea>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                <button id="modal-cancel-btn" class="modal-btn cancel-btn">CANCEL</button>
+                <button id="modal-confirm-btn" class="modal-btn confirm-btn">EXECUTE UNBLOCK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Helper: format any Date to dd/mm/yyyy HH:MM:SS
+        function fmtDate(date) {
+            const d  = String(date.getDate()).padStart(2, '0');
+            const mo = String(date.getMonth() + 1).padStart(2, '0');
+            const y  = date.getFullYear();
+            const h  = String(date.getHours()).padStart(2, '0');
+            const mi = String(date.getMinutes()).padStart(2, '0');
+            const s  = String(date.getSeconds()).padStart(2, '0');
+            return `${d}/${mo}/${y} ${h}:${mi}:${s}`;
+        }
+
+        // Update UTC Clock (no duplicate UTC)
+        function updateClock() {
+            const clockEl = document.getElementById('clock');
+            if (!clockEl) return;
+            const now = new Date();
+            const h  = String(now.getUTCHours()).padStart(2, '0');
+            const mi = String(now.getUTCMinutes()).padStart(2, '0');
+            const s  = String(now.getUTCSeconds()).padStart(2, '0');
+            clockEl.textContent = `${h}:${mi}:${s} UTC`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Global list of active blocks for dynamic timer updates
+        let activeBlocksList = [];
+
+        // Helper to format remaining time dynamically
+        function formatRemainingTime(endTimeStr) {
+            const end = new Date(endTimeStr);
+            const now = new Date();
+            const diffMs = end - now;
+            
+            if (diffMs <= 0) {
+                return '<span style="color: var(--neon-green);">EXPIRED</span>';
+            }
+
+            const diffSecs = Math.floor(diffMs / 1000);
+            const secs = diffSecs % 60;
+            const mins = Math.floor(diffSecs / 60) % 60;
+            const hours = Math.floor(diffSecs / 3600) % 24;
+            const days = Math.floor(diffSecs / 86400);
+
+            if (days > 0) {
+                return `${days}d ${hours}h ${mins}m`;
+            } else if (hours > 0) {
+                return `${hours}h ${mins}m ${secs}s`;
+            } else if (mins > 0) {
+                return `${mins}m ${secs}s`;
+            } else {
+                return `${secs}s`;
+            }
+        }
+
+        // Ticks the remaining time values on screen every second
+        function tickTimers() {
+            const rows = document.querySelectorAll('.timer-container');
+            rows.forEach(el => {
+                const endTime = el.dataset.endTime;
+                el.innerHTML = formatRemainingTime(endTime);
+            });
+        }
+        setInterval(tickTimers, 1000);
+
+        // Fetch Data from Server REST APIs
+        async function loadDashboardData() {
+            try {
+                // Fetch Active Blocks
+                const blocksRes = await fetch('/active-blocks');
+                const blocksData = await blocksRes.json();
+                
+                // Fetch Violations
+                const violRes = await fetch('/violations');
+                const violData = await violRes.json();
+
+                if (blocksData.status === 'success' && violData.status === 'success') {
+                    // Update Stats
+                    document.getElementById('stat-active').textContent = blocksData.active_blocks_count;
+                    document.getElementById('stat-violations').textContent = violData.violations_count;
+
+                    // Update Active Blocks Table
+                    const blocksBody = document.getElementById('active-blocks-body');
+                    blocksBody.innerHTML = '';
+                    activeBlocksList = blocksData.active_blocks;
+
+                    if (activeBlocksList.length === 0) {
+                        blocksBody.innerHTML = `<tr><td colspan="4" class="empty-placeholder">No active IP blocks at this time</td></tr>`;
+                    } else {
+                        activeBlocksList.forEach(block => {
+                            const tierClass = block.violation_count === 1 ? 'tier-1' : (block.violation_count === 2 ? 'tier-2' : 'tier-3');
+                            const tierText = block.violation_count === 1 ? '5m Block' : (block.violation_count === 2 ? '30m Block' : '7d Block');
+                            
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td class="ip-cell">${block.client_ip}</td>
+                                <td><span class="badge-violation ${tierClass}">${tierText}</span></td>
+                                <td class="time-cell timer-container" data-end-time="${block.block_end}">${formatRemainingTime(block.block_end)}</td>
+                                <td style="color: var(--text-primary); font-size: 12px;">${block.reason}</td>
+                                <td>
+                                    <button onclick="unblockIP('${block.client_ip}')"
+                                        style="padding:3px 10px; background:transparent; color:var(--neon-red); border:1px solid var(--neon-red); border-radius:4px; cursor:pointer; font-size:11px; font-family:var(--font-mono); transition:all 0.2s;"
+                                        onmouseover="this.style.background='rgba(255,0,85,0.15)'"
+                                        onmouseout="this.style.background='transparent'">
+                                        UNBLOCK
+                                    </button>
+                                </td>
+                            `;
+                            blocksBody.appendChild(row);
+                        });
+                    }
+
+                    // Update Historical Violations Table
+                    const violBody = document.getElementById('violations-body');
+                    violBody.innerHTML = '';
+                    
+                    if (violData.violations.length === 0) {
+                        violBody.innerHTML = `<tr><td colspan="3" class="empty-placeholder">No alerts recorded in database</td></tr>`;
+                    } else {
+                        violData.violations.forEach(viol => {
+                            // Format ISO string to dd/mm/yyyy
+                            const receivedTime = fmtDate(new Date(viol.timestamp));
+                            
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td class="ip-cell">${viol.client_ip}</td>
+                                <td style="color: var(--neon-cyan);">${viol.rule_name}</td>
+                                <td class="time-cell">${receivedTime}</td>
+                            `;
+                            violBody.appendChild(row);
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching dashboard data:", error);
+            }
+        }
+
+        // Unblock Modal state and handlers
+        let currentUnblockIP = null;
+
+        function unblockIP(ip) {
+            currentUnblockIP = ip;
+            document.getElementById('modal-ip-display').textContent = ip;
+            document.getElementById('modal-reason-input').value = 'Manual unblock by operator';
+            document.getElementById('unblock-modal').classList.add('active');
+            
+            // Auto focus input
+            setTimeout(() => {
+                document.getElementById('modal-reason-input').focus();
+                document.getElementById('modal-reason-input').select();
+            }, 100);
+        }
+
+        function closeUnblockModal() {
+            document.getElementById('unblock-modal').classList.remove('active');
+            currentUnblockIP = null;
+        }
+
+        document.getElementById('modal-cancel-btn').addEventListener('click', closeUnblockModal);
+
+        document.getElementById('modal-confirm-btn').addEventListener('click', async () => {
+            if (!currentUnblockIP) return;
+            const reason = document.getElementById('modal-reason-input').value.trim();
+            const ip = currentUnblockIP;
+            closeUnblockModal();
+            try {
+                const res = await fetch(`/unblock/${ip}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: reason || 'Manual unblock by operator' })
+                });
+                const data = await res.json();
+                if (data.status === 'success') {
+                    loadDashboardData();
+                } else {
+                    alert(data.message);
+                }
+            } catch (e) {
+                alert('Unblock request failed: ' + e);
+            }
+        });
+
+        // Poll API endpoints every 3 seconds to keep UI real-time
+        setInterval(loadDashboardData, 3000);
+        loadDashboardData();
+        // IP History fetch
+        async function fetchIpHistory(ip) {
+            const res = await fetch(`/history/${ip}`);
+            const data = await res.json();
+            const container = document.getElementById('history-result');
+            if (data.status !== 'success') {
+                container.innerHTML = `<div class="empty-placeholder">Error: ${data.message}</div>`;
+                return;
+            }
+            const blocks = data.history.blocks || [];
+            const unblocks = data.history.unblocks || [];
+
+            if (blocks.length === 0 && unblocks.length === 0) {
+                container.innerHTML = `<div class="empty-placeholder">No history for ${ip}</div>`;
+                return;
+            }
+
+            // Block history table
+            let html = `<p style="font-size:12px; color:var(--neon-red); letter-spacing:1px; margin-bottom:6px;">BLOCK HISTORY (${blocks.length})</p>`;
+            html += `<table><thead><tr><th>Start</th><th>End</th><th>Tier</th><th>Status</th><th>Reason</th></tr></thead><tbody>`;
+            blocks.forEach(rec => {
+                const tier = rec.violation_count === 1 ? '5m' : (rec.violation_count === 2 ? '30m' : '7d');
+                const statusColor = rec.status === 'ACTIVE' ? 'var(--neon-red)' : 'var(--text-muted)';
+                html += `<tr>
+                    <td class="time-cell">${fmtDate(new Date(rec.block_start))}</td>
+                    <td class="time-cell">${fmtDate(new Date(rec.block_end))}</td>
+                    <td>${tier}</td>
+                    <td style="color:${statusColor}; font-family:var(--font-mono); font-size:11px;">${rec.status}</td>
+                    <td style="font-size:12px;">${rec.reason}</td>
+                </tr>`;
+            });
+            html += `</tbody></table>`;
+
+            // Unblock events table (if any)
+            if (unblocks.length > 0) {
+                html += `<p style="font-size:12px; color:var(--neon-green); letter-spacing:1px; margin:14px 0 6px;">MANUAL UNBLOCKS (${unblocks.length})</p>`;
+                html += `<table><thead><tr><th>Unblocked At</th><th>Reason</th></tr></thead><tbody>`;
+                unblocks.forEach(u => {
+                    html += `<tr>
+                        <td class="time-cell">${fmtDate(new Date(u.unblocked_at))}</td>
+                        <td style="color:var(--neon-green); font-size:12px;">${u.reason}</td>
+                    </tr>`;
+                });
+                html += `</tbody></table>`;
+            }
+
+            container.innerHTML = html;
+        }
+
+        document.getElementById('history-search-btn').addEventListener('click', () => {
+            const ip = document.getElementById('history-ip-input').value.trim();
+            if (ip) {
+                fetchIpHistory(ip);
+            }
+        });
+
+        </script>
+</body>
+</html>

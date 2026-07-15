@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC-Portal</title>
+    <meta name="description" content="Security Operations Center (SOC) Portal - Live Monitoring & Event Dashboard">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Cyber Grid Background -->
+    <div class="grid-background"></div>
+    <div class="scanner-line"></div>
+
+    <div class="portal-container">
+        <!-- Dashboard Header -->
+        <header class="dashboard-header">
+            <div class="logo-area">
+                <span class="pulse-indicator status-green" id="header-pulse"></span>
+                <h1 id="portal-title">SOC-PORTAL</h1>
+                <span class="badge badge-sec">SYSTEM: ACTIVE</span>
+            </div>
+            <div class="meta-area">
+                <div class="time-display" id="clock">00:00:00 UTC</div>
+                <div class="host-display" id="host-name">NODE-01.SOC.LOCAL</div>
+            </div>
+        </header>
+
+        <!-- Main Grid Layout -->
+        <main class="dashboard-grid">
+            
+            <!-- Left Panel: Status & Metrics -->
+            <section class="panel glass-card" id="status-panel">
+                <div class="panel-header">
+                    <h2>SYSTEM MONITORS</h2>
+                    <span class="scan-text">SCANNING</span>
+                </div>
+                <div class="panel-body">
+                    <div class="metric-row">
+                        <span class="metric-label">Threat Level</span>
+                        <span class="metric-value text-green" id="threat-level">STABLE</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">IDS Status</span>
+                        <span class="metric-value text-green" id="ids-status">GUARDING</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Firewall Block Rate</span>
+                        <span class="metric-value text-cyan" id="fw-rate">99.98%</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Active Connections</span>
+                        <span class="metric-value" id="conn-count">142</span>
+                    </div>
+                    
+                    <div class="radar-container">
+                        <div class="radar">
+                            <div class="radar-sweep"></div>
+                            <div class="radar-blip" style="top: 30%; left: 40%;"></div>
+                            <div class="radar-blip" style="top: 70%; left: 60%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Center Panel: Action & Simulation (Generates Nginx logs) -->
+            <section class="panel glass-card" id="action-panel">
+                <div class="panel-header">
+                    <h2>SECURE CONTROLS</h2>
+                    <span class="subtext">LOG ACTIONS</span>
+                </div>
+                <div class="panel-body actions-container">
+                    <p class="section-desc">Trigger secure test events. Each action sends a backend request to Nginx to generate access logs for Splunk ingestion.</p>
+                    
+                    <div class="btn-group">
+                        <button class="cyber-btn btn-primary" id="btn-audit" onclick="triggerLogAction('audit')">
+                            <span class="btn-glitch"></span>
+                            <span class="btn-text">RUN AUDIT EVENT</span>
+                        </button>
+                        
+                        <button class="cyber-btn btn-info" id="btn-diagnostic" onclick="triggerLogAction('diagnostics')">
+                            <span class="btn-glitch"></span>
+                            <span class="btn-text">DIAGNOSTIC TEST</span>
+                        </button>
+                        
+                        <button class="cyber-btn btn-warning" id="btn-anomaly" onclick="triggerLogAction('simulate-intrusion')">
+                            <span class="btn-glitch"></span>
+                            <span class="btn-text">SIMULATE ANOMALY</span>
+                        </button>
+                        
+                        <button class="cyber-btn btn-danger" id="btn-critical" onclick="triggerLogAction('critical-alert')">
+                            <span class="btn-glitch"></span>
+                            <span class="btn-text">TRIGGER ALARM</span>
+                        </button>
+                    </div>
+
+                    <div class="api-feedback" id="api-feedback-box">
+                        <span class="feedback-label">API RESPONSE:</span>
+                        <code class="feedback-content" id="api-response-text">Awaiting operational command...</code>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Live Logs Feed -->
+            <section class="panel glass-card" id="feed-panel">
+                <div class="panel-header">
+                    <h2>LIVE AUDIT FEED</h2>
+                    <span class="badge badge-cyan">STREAMING</span>
+                </div>
+                <div class="panel-body console-body">
+                    <div class="console-output" id="console-output">
+                        <div class="console-line system-msg">[SYSTEM] initializing SOC-Portal Interface...</div>
+                        <div class="console-line system-msg">[SYSTEM] loading css styles and glass assets...</div>
+                        <div class="console-line system-msg">[SYSTEM] network mapping configured: access-log -> splunk_json</div>
+                        <div class="console-line success-msg">[SUCCESS] system ready. Monitoring access port...</div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="dashboard-footer">
+            <p>SOC-PORTAL © 2026 // CLASSIFIED OPERATIONS // ALL EVENTS ARE LOGGED TO SPLUNK</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
