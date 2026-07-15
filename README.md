@@ -8,9 +8,12 @@ This repository contains a Security Operations Center (SOC) Operations Portal la
 
 Ensure the target system meets the following software requirements:
 - **Operating System**: Linux (Ubuntu/Debian, CentOS/RHEL, or similar)
-- **Web Server**: `nginx` (v1.18+)
-- **Runtime Environment**: Python 3.8+ (with `venv` support)
-- **Network Access**: Port `4567` (for Nginx) must be open. Port `6666` (for Flask Webhook) runs on localhost and is proxied through Nginx.
+- **Production runtime**: Docker Engine with Docker Compose v2
+- **Manual runtime**: `nginx` (v1.18+) and Python 3.8+ with `venv`
+- **Default Docker ports**:
+  - Dashboard/API: `0.0.0.0:4567`
+  - Local-only webhook: `127.0.0.1:6667`
+  - Local-only Flask backend: `127.0.0.1:6666`
 
 ### Recommended production path
 
@@ -23,10 +26,24 @@ For production or repeatable deployment, use the Docker Compose packaging instea
 This creates `.env` from `.env.example` if missing, builds the Flask/Gunicorn app image, starts Nginx, persists SQLite data under `./db`, writes Nginx logs under `./logs/nginx`, writes webhook alert logs under `./logs/alerts`, and exposes:
 
 ```text
-SOC Portal: http://127.0.0.1:4567/
-Dashboard : http://127.0.0.1:4567/dashboard/
-Webhook   : http://127.0.0.1:4567/webhook
+SOC Portal: http://<server-ip>:4567/
+Dashboard : http://<server-ip>:4567/dashboard/
+Webhook   : http://127.0.0.1:6667/webhook
 ```
+
+Production port bindings are controlled by `.env`:
+
+```bash
+APP_BIND=127.0.0.1:6666
+DASHBOARD_LISTEN=0.0.0.0:4567
+WEBHOOK_LISTEN=127.0.0.1:6667
+```
+
+Recommended production model when Splunk and splunk-blocker run on the same host:
+
+- Splunk alert webhook URL: `http://127.0.0.1:6667/webhook`
+- Dashboard for VPN/internal users: `http://<server-ip>:4567/dashboard/`
+- Do not expose `6666` or `6667` externally.
 
 Set firewall integration values in `.env` before using Palo Alto actions:
 
@@ -149,20 +166,24 @@ After starting both services, verify:
 ss -ltnp
 curl -sS -o /tmp/splunk-blocker-dashboard.html -w '%{http_code} %{content_type}\n' http://127.0.0.1:4567/dashboard/
 curl -sS http://127.0.0.1:4567/active-blocks
+curl -X POST http://127.0.0.1:6667/webhook \
+  -H 'Content-Type: application/json' \
+  -d '{"search_name":"verify","result":{"client_ip":"192.0.2.10"}}'
 ```
 
 Expected listeners:
 
 ```text
-Nginx: 0.0.0.0:4567
-Flask: 0.0.0.0:6666
+Dashboard Nginx: 0.0.0.0:4567
+Webhook Nginx  : 127.0.0.1:6667
+Flask/Gunicorn : 127.0.0.1:6666
 ```
 
 ---
 
 ## 4. Webhook Server Setup (Python Flask)
 
-The webhook receiver accepts Splunk alert payloads, parses client IPs, records violations in SQLite, and tracks block durations. All settings (such as target DB path and Palo Alto URL/Keys) are defined in `config/settings.py`.
+The webhook receiver accepts Splunk alert payloads, parses one or more client IPs, records violations in SQLite, and tracks block durations. Runtime settings come from `.env`; `config/settings.py` only provides defaults and environment loading.
 
 ### Steps:
 1. Create a Python Virtual Environment inside the project root:
@@ -188,8 +209,32 @@ The webhook receiver accepts Splunk alert payloads, parses client IPs, records v
 
 ## 5. Splunk Integration Guide
 
-### Step 1: Log Ingestion (Nginx JSON logs)
-For Docker Compose deployments, configure your Splunk Universal Forwarder to monitor `./logs/nginx/access.log` from the project directory.
+### Step 1: Detection Source
+
+In production, use firewall logs as the detection source. The SPL alert must output suspicious IPs as `client_ip` or `values(client_ip)`.
+
+Example for firewall logs with source IP in `src_ip`:
+
+```splunk
+index=firewall action=allowed threat="suspicious"
+| stats count by src_ip
+| where count >= 5
+| rename src_ip as client_ip
+```
+
+The webhook receiver accepts both single-IP and multi-IP payloads:
+
+```json
+{"result": {"client_ip": "10.10.20.55"}}
+```
+
+```json
+{"result": {"values(client_ip)": ["10.10.20.55", "10.10.30.77"]}}
+```
+
+### Optional: Ingest splunk-blocker Nginx logs
+
+For Docker Compose deployments, monitor `./logs/nginx/access.log` from the project directory if you want dashboard/webhook access audit logs in Splunk.
 
 For manual Nginx deployments, monitor `/opt/nginx-logs/access.log`.
 
@@ -204,19 +249,20 @@ Example manual input:
 Splunk will automatically index and parse all parameters (`client_ip`, `status`, `request_uri`, `soc_event_type`) without requiring custom regular expressions.
 
 ### Step 2: Creating Alerts & Webhook Triggers
-1. Write a Splunk search query to detect malicious activity (e.g. brute force, anomalies, or test triggers):
+1. Write a Splunk search query that returns `client_ip`:
    ```splunk
-   index=security_logs status=403 soc_event_type="simulate-intrusion"
-   | stats count by client_ip
-   | where count > 3
+   index=firewall action=allowed threat="suspicious"
+   | stats count by src_ip
+   | where count >= 5
+   | rename src_ip as client_ip
    ```
 2. Save this search as an **Alert**.
 3. Set **Trigger Actions** -> Add Action -> **Webhook**.
-4. Configure the Webhook URL (pointing to the Nginx port):
+4. Configure the Webhook URL:
    ```
-   http://<your-server-ip>:4567/webhook
+   http://127.0.0.1:6667/webhook
    ```
-   *Requests sent to Nginx will be proxied automatically to the Flask backend, logging the webhook activity in Nginx logs simultaneously.*
+   This listener is local-only and is intended for Splunk running on the same host as Docker.
 
 ### Step 3: Gateway Block Enforcement
 Your firewall or routing scripts can query the active blocks list to block malicious IPs:

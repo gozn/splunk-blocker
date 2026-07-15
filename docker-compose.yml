@@ -2,22 +2,29 @@ services:
   app:
     build: .
     restart: unless-stopped
+    network_mode: host
     env_file:
       - .env
     volumes:
       - ./db:/app/db
       - ./logs/alerts:/var/log/splunk-blocker
-    expose:
-      - "6666"
 
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
+    network_mode: host
     depends_on:
       - app
-    ports:
-      - "${HTTP_PORT:-4567}:4567"
     volumes:
       - ./public:/usr/share/nginx/html:ro
-      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
       - ./logs/nginx:/var/log/nginx
+    environment:
+      APP_BIND: ${APP_BIND:-127.0.0.1:6666}
+      DASHBOARD_LISTEN: ${DASHBOARD_LISTEN:-0.0.0.0:4567}
+      WEBHOOK_LISTEN: ${WEBHOOK_LISTEN:-127.0.0.1:6667}
+    command: >
+      sh -c "envsubst '$$APP_BIND $$DASHBOARD_LISTEN $$WEBHOOK_LISTEN'
+      < /etc/nginx/nginx.conf.template
+      > /etc/nginx/nginx.conf
+      && nginx -g 'daemon off;'"

@@ -4,7 +4,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PROJECT_ROOT=/app \
     DB_PATH=/app/db/splunk_blocker.db \
-    LOG_FILE_PATH=/var/log/splunk-blocker/splunk_alerts.log
+    LOG_FILE_PATH=/var/log/splunk-blocker/splunk_alerts.log \
+    APP_BIND=127.0.0.1:6666
 
 WORKDIR /app
 
@@ -20,4 +21,4 @@ RUN mkdir -p /app/db /var/log/splunk-blocker
 
 EXPOSE 6666
 
-CMD ["gunicorn", "--bind", "0.0.0.0:6666", "--workers", "2", "--access-logfile", "-", "--error-logfile", "-", "run:app"]
+CMD ["sh", "-c", "gunicorn --bind ${APP_BIND} --workers 2 --access-logfile - --error-logfile - run:app"]

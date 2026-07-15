@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify, render_template
 import logging
 import json
 import os
+import ipaddress
 from datetime import datetime
 from config.settings import LOG_FILE_PATH
 from app.database import (
@@ -19,6 +20,42 @@ YELLOW = '\033[93m'
 RED = '\033[91m'
 BOLD = '\033[1m'
 RESET = '\033[0m'
+
+def _flatten_ip_values(value):
+    if value is None:
+        return []
+    if isinstance(value, list):
+        items = []
+        for item in value:
+            items.extend(_flatten_ip_values(item))
+        return items
+    if isinstance(value, str):
+        parts = []
+        for item in value.split(','):
+            item = item.strip()
+            if item:
+                parts.append(item)
+        return parts
+    return [str(value).strip()]
+
+def extract_client_ips(result):
+    """Extract one or more client IPs from Splunk webhook result fields."""
+    candidates = []
+    candidates.extend(_flatten_ip_values(result.get('client_ip')))
+    candidates.extend(_flatten_ip_values(result.get('values(client_ip)')))
+
+    ips = []
+    seen = set()
+    for candidate in candidates:
+        try:
+            ip = str(ipaddress.ip_address(candidate))
+        except ValueError:
+            logger.warning("Skipping invalid client_ip value from webhook payload: %s", candidate)
+            continue
+        if ip not in seen:
+            ips.append(ip)
+            seen.add(ip)
+    return ips
 
 @main_bp.route('/webhook', methods=['POST'])
 def splunk_webhook():
@@ -58,14 +95,27 @@ def splunk_webhook():
     except Exception as e:
         logger.error(f"Failed to write alert to log file: {e}")
 
-    # 2. Extract Client IP – Splunk may send 'client_ip' or 'values(client_ip)'
-    client_ip = result.get('client_ip') or result.get('values(client_ip)')
-    block_info = None
-    if client_ip:
-        try:
-            block_info = record_violation(client_ip, search_name, payload)
-        except Exception as e:
-            logger.error(f"Database operation failed: {e}")
+    # 2. Extract Client IPs – Splunk may send 'client_ip' or 'values(client_ip)' as a string or list
+    client_ips = extract_client_ips(result)
+    block_results = []
+    skipped_ips = []
+    if client_ips:
+        for client_ip in client_ips:
+            try:
+                block_info = record_violation(client_ip, search_name, payload)
+                if block_info:
+                    block_results.append(block_info)
+                else:
+                    skipped_ips.append({
+                        "client_ip": client_ip,
+                        "reason": "active block already exists"
+                    })
+            except Exception as e:
+                logger.error(f"Database operation failed for {client_ip}: {e}")
+                skipped_ips.append({
+                    "client_ip": client_ip,
+                    "reason": str(e)
+                })
     else:
         logger.warning("No client_ip found in Splunk result payload; skipping block calculation")
 
@@ -87,22 +137,28 @@ def splunk_webhook():
         print(f"\n{YELLOW}[No inline result data provided in this alert payload]{RESET}")
 
     # 4. Display progressive IP blocking details if triggered
-    if block_info:
+    if block_results:
         print(f"\n{RED}{BOLD}🚫 IP BLOCK EXECUTED 🚫{RESET}")
-        print(f"  • {BOLD}Blocked IP    :{RESET} {RED}{block_info['client_ip']}{RESET}")
-        print(f"  • {BOLD}Duration      :{RESET} {YELLOW}{block_info['duration_minutes']} minutes{RESET} (Violation #{block_info['violation_count']})")
-        print(f"  • {BOLD}Block Period  :{RESET} {block_info['block_start']} to {block_info['block_end']}")
-        print(f"  • {BOLD}Block Reason  :{RESET} {block_info['reason']}")
+        for block_info in block_results:
+            print(f"  • {BOLD}Blocked IP    :{RESET} {RED}{block_info['client_ip']}{RESET}")
+            print(f"    {BOLD}Duration      :{RESET} {YELLOW}{block_info['duration_minutes']} minutes{RESET} (Violation #{block_info['violation_count']})")
+            print(f"    {BOLD}Block Period  :{RESET} {block_info['block_start']} to {block_info['block_end']}")
+            print(f"    {BOLD}Block Reason  :{RESET} {block_info['reason']}")
         
     print(f"{RED}{BOLD}=" * 60 + RESET + "\n")
 
     response_data = {
         "status": "success",
         "message": "Webhook alert processed successfully",
-        "alert_name": search_name
+        "alert_name": search_name,
+        "client_ips": client_ips,
+        "blocks_created": len(block_results),
+        "blocks_skipped": len(skipped_ips),
     }
-    if block_info:
-        response_data["block_info"] = block_info
+    if block_results:
+        response_data["block_results"] = block_results
+    if skipped_ips:
+        response_data["skipped_ips"] = skipped_ips
 
     return jsonify(response_data), 200
 
